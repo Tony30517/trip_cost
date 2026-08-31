@@ -43,9 +43,10 @@
   button, .link-btn {
     background: var(--accent); color: #fff; border: none; border-radius: 8px;
     padding: 8px 14px; font-size: 0.85rem; cursor: pointer; text-decoration: none;
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 6px; font-family: inherit;
   }
   button.secondary, .link-btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.danger { background: transparent; color: var(--red); padding: 4px 8px; font-size: 0.75rem; }
   .card {
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px; margin-bottom: 16px;
@@ -74,16 +75,38 @@
   .empty, .error { color: var(--muted); font-size: 0.85rem; padding: 8px 0; }
   .error { color: var(--red); }
   .updated { color: var(--muted); font-size: 0.75rem; margin-top: 4px; }
+
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--card-bg); border-radius: 14px; padding: 20px;
+    width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { margin-top: 0; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 0.9rem; font-family: inherit;
+  }
+  .checkbox-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .checkbox-grid label {
+    display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>旅遊記帳</h1>
-  <div class="sub" id="tripSub">資料來源：Google 試算表（即時讀取）</div>
+  <div class="sub">資料即時同步自 Firebase，大家開這個網頁都能新增消費</div>
 
   <div class="toolbar">
-    <button id="refreshBtn">🔄 重新整理</button>
-    <a class="link-btn secondary" id="sheetLink" href="#" target="_blank" rel="noopener">✏️ 開啟試算表新增消費</a>
+    <button id="addBtn">➕ 新增消費</button>
   </div>
 
   <div id="content">
@@ -91,132 +114,181 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h2>新增消費</h2>
+    <form id="expenseForm">
+      <div class="field">
+        <label>日期</label>
+        <input type="date" id="fDate" required>
+      </div>
+      <div class="field">
+        <label>項目</label>
+        <input type="text" id="fItem" placeholder="例如：機票、晚餐" required>
+      </div>
+      <div class="field">
+        <label>金額（台幣）</label>
+        <input type="number" id="fAmount" min="1" step="1" required>
+      </div>
+      <div class="field">
+        <label>代墊人</label>
+        <select id="fPayer" required></select>
+      </div>
+      <div class="field">
+        <label>分攤人</label>
+        <div class="checkbox-grid" id="fParticipants"></div>
+      </div>
+      <div class="field">
+        <label>付款方式（選填）</label>
+        <input type="text" id="fMethod" placeholder="例如：信用卡、現金">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="cancelBtn">取消</button>
+        <button type="submit">送出</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
   // ---- 設定：換其他行程時只要改這裡 ----
-  const SHEET_ID = '1VjMylSkLOyUYRwxzmrJ3j4Qlh6k-pY1zjRsl681HF3Q';
-  const GID = '0';
+  const PEOPLE = ['小鄧', '彥甫', '煒琮', '皇奇'];
+  const TRIP_ID = 'japan-2025-12';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBY06UvwQKpQUSXcT-_BrU2z1okHaslCB0",
+    authDomain: "trip-cost-f402c.firebaseapp.com",
+    projectId: "trip-cost-f402c",
+    storageBucket: "trip-cost-f402c.firebasestorage.app",
+    messagingSenderId: "266690313234",
+    appId: "1:266690313234:web:849e1353dbf396644a6ccb"
+  };
   // --------------------------------------
 
-  document.getElementById('sheetLink').href =
-    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=${GID}`;
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const expensesRef = db.collection('trips').doc(TRIP_ID).collection('expenses');
 
   const content = document.getElementById('content');
-  const refreshBtn = document.getElementById('refreshBtn');
+  const addBtn = document.getElementById('addBtn');
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const expenseForm = document.getElementById('expenseForm');
+  const fPayer = document.getElementById('fPayer');
+  const fParticipants = document.getElementById('fParticipants');
+
+  PEOPLE.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    fPayer.appendChild(opt);
+  });
+  PEOPLE.forEach(name => {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = name;
+    cb.checked = true;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(name));
+    fParticipants.appendChild(label);
+  });
 
   function fmt(n) {
     return Math.round(n).toLocaleString('zh-Hant-TW');
   }
 
-  function findIdx(cols, upto, label) {
-    for (let i = 0; i <= upto; i++) {
-      if (cols[i] && cols[i].label === label) return i;
+  function openModal() {
+    document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+    modalBackdrop.classList.add('open');
+  }
+  function closeModal() {
+    modalBackdrop.classList.remove('open');
+    expenseForm.reset();
+  }
+  addBtn.addEventListener('click', openModal);
+  cancelBtn.addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
+
+  expenseForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const participants = Array.from(fParticipants.querySelectorAll('input:checked')).map(cb => cb.value);
+    if (participants.length === 0) {
+      alert('至少要選一個分攤人');
+      return;
     }
-    return -1;
+    const submitBtn = expenseForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await expensesRef.add({
+        date: document.getElementById('fDate').value,
+        item: document.getElementById('fItem').value.trim(),
+        amount: Number(document.getElementById('fAmount').value),
+        payer: fPayer.value,
+        participants,
+        method: document.getElementById('fMethod').value.trim(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closeModal();
+    } catch (err) {
+      alert('新增失敗：' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  async function deleteExpense(id) {
+    if (!confirm('確定要刪除這筆消費嗎？')) return;
+    try {
+      await expensesRef.doc(id).delete();
+    } catch (err) {
+      alert('刪除失敗：' + err.message);
+    }
   }
-
-  function loadData() {
-    content.innerHTML = '<div class="card"><div class="empty">載入中…</div></div>';
-
-    // 先找出「每人分攤金額」欄位，把搜尋範圍限制在它之前，
-    // 避免跟右邊統計表裡同名的欄位（例如「分攤金額」）搞混。
-    window.__handleSheetData = function (data) {
-      try {
-        render(data.table);
-      } catch (e) {
-        showError('資料格式解析失敗：' + e.message);
-      }
-    };
-
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:__handleSheetData&gid=${GID}&_=${Date.now()}`;
-
-    const old = document.getElementById('gvizScript');
-    if (old) old.remove();
-
-    const script = document.createElement('script');
-    script.id = 'gvizScript';
-    script.src = url;
-    script.onerror = () => showError('無法讀取試算表，請確認試算表已開啟「知道連結的人都可檢視」的共用權限。');
-    document.body.appendChild(script);
-  }
+  window.deleteExpense = deleteExpense;
 
   function showError(msg) {
     content.innerHTML = `<div class="card"><div class="error">${msg}</div></div>`;
   }
 
-  function render(table) {
-    const cols = table.cols;
-    const perShareIdx = findIdx(cols, cols.length - 1, '每人分攤金額');
-    if (perShareIdx === -1) {
-      showError('找不到「每人分攤金額」欄位，請確認試算表格式沒有變動。');
-      return;
-    }
-    const dateIdx = findIdx(cols, perShareIdx, '日期');
-    const itemIdx = findIdx(cols, perShareIdx, '項目');
-    const payerIdx = findIdx(cols, perShareIdx, '代墊人');
-    const methodIdx = findIdx(cols, perShareIdx, '付款方式');
-    const splitCountIdx = findIdx(cols, perShareIdx, '分攤人數');
-    let amountIdx = -1;
-    for (let i = 0; i <= perShareIdx; i++) {
-      const label = cols[i] && cols[i].label || '';
-      if (label.indexOf('金額') !== -1 && label.indexOf('分攤') === -1 && label.indexOf('代墊') === -1) {
-        amountIdx = i;
-        break;
-      }
-    }
+  expensesRef.orderBy('createdAt', 'asc').onSnapshot(
+    snapshot => {
+      const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      render(expenses);
+    },
+    err => showError('無法讀取資料：' + err.message)
+  );
 
-    const peopleCols = [];
-    for (let i = splitCountIdx + 1; i < perShareIdx; i++) {
-      if (cols[i] && cols[i].label) peopleCols.push({ idx: i, name: cols[i].label });
-    }
-
-    const cellVal = (row, idx) => (idx >= 0 && row.c[idx]) ? row.c[idx].v : null;
-    const cellFmt = (row, idx) => (idx >= 0 && row.c[idx]) ? (row.c[idx].f || row.c[idx].v) : '';
-
-    const expenses = [];
-    const paid = {}, owed = {};
-    peopleCols.forEach(p => { paid[p.name] = 0; owed[p.name] = 0; });
-
-    table.rows.forEach(row => {
-      if (!row || !row.c) return;
-      const item = cellVal(row, itemIdx);
-      const amount = cellVal(row, amountIdx);
-      if (!item || !amount) return; // 跳過空白列（例如只用來放右側統計表的列）
-
-      const payer = cellVal(row, payerIdx) || '';
-      const participants = peopleCols.filter(p => cellVal(row, p.idx) === true).map(p => p.name);
-      const share = participants.length ? amount / participants.length : 0;
-
-      participants.forEach(name => { owed[name] = (owed[name] || 0) + share; });
-      if (payer) paid[payer] = (paid[payer] || 0) + amount;
-
-      expenses.push({
-        date: cellFmt(row, dateIdx),
-        item,
-        amount,
-        payer,
-        method: cellFmt(row, methodIdx),
-        participants,
-        share
-      });
-    });
-
+  function render(expenses) {
     if (expenses.length === 0) {
-      content.innerHTML = '<div class="card"><div class="empty">目前試算表裡還沒有任何消費紀錄，點右上角「開啟試算表」新增第一筆吧！</div></div>';
+      content.innerHTML = '<div class="card"><div class="empty">目前還沒有任何消費紀錄，點上面「新增消費」開始記帳吧！</div></div>';
       return;
     }
+
+    const paid = {}, owed = {};
+    PEOPLE.forEach(name => { paid[name] = 0; owed[name] = 0; });
+
+    expenses.forEach(e => {
+      const share = e.participants.length ? e.amount / e.participants.length : 0;
+      e.share = share;
+      e.participants.forEach(name => { owed[name] = (owed[name] || 0) + share; });
+      if (e.payer) paid[e.payer] = (paid[e.payer] || 0) + e.amount;
+    });
 
     const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
     const net = {};
-    peopleCols.forEach(p => { net[p.name] = (paid[p.name] || 0) - (owed[p.name] || 0); });
+    PEOPLE.forEach(name => { net[name] = (paid[name] || 0) - (owed[name] || 0); });
 
     const settlements = settleDebts(net);
 
     content.innerHTML = `
       ${cardTotal(totalSpent, expenses.length)}
-      ${cardPeople(peopleCols, paid, owed, net)}
+      ${cardPeople(paid, owed, net)}
       ${cardSettlement(settlements)}
       ${cardExpenses(expenses)}
-      <div class="updated">最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
+      <div class="updated">即時同步中，最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
     `;
   }
 
@@ -229,16 +301,16 @@
       </div>`;
   }
 
-  function cardPeople(peopleCols, paid, owed, net) {
-    const items = peopleCols.map(p => {
-      const n = net[p.name] || 0;
+  function cardPeople(paid, owed, net) {
+    const items = PEOPLE.map(name => {
+      const n = net[name] || 0;
       const cls = n > 0.5 ? 'pos' : (n < -0.5 ? 'neg' : '');
       const netText = n > 0.5 ? `應收回 NT$ ${fmt(n)}` : (n < -0.5 ? `應付出 NT$ ${fmt(-n)}` : '已結清');
       return `
         <div class="person">
-          <div class="name">${p.name}</div>
-          <div class="row"><span>已代墊</span><span>NT$ ${fmt(paid[p.name] || 0)}</span></div>
-          <div class="row"><span>應分攤</span><span>NT$ ${fmt(owed[p.name] || 0)}</span></div>
+          <div class="name">${name}</div>
+          <div class="row"><span>已代墊</span><span>NT$ ${fmt(paid[name] || 0)}</span></div>
+          <div class="row"><span>應分攤</span><span>NT$ ${fmt(owed[name] || 0)}</span></div>
           <div class="net ${cls}">${netText}</div>
         </div>`;
     }).join('');
@@ -269,6 +341,7 @@
         <td>${e.participants.join('、') || '-'}</td>
         <td>NT$ ${fmt(e.share)}</td>
         <td>${e.method || ''}</td>
+        <td><button class="danger" onclick="deleteExpense('${e.id}')">刪除</button></td>
       </tr>`).join('');
     return `
       <div class="card">
@@ -276,7 +349,7 @@
         <div class="table-scroll">
           <table>
             <thead>
-              <tr><th>日期</th><th>項目</th><th>金額</th><th>代墊人</th><th>分攤人</th><th>每人分攤</th><th>付款方式</th></tr>
+              <tr><th>日期</th><th>項目</th><th>金額</th><th>代墊人</th><th>分攤人</th><th>每人分攤</th><th>付款方式</th><th></th></tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
@@ -309,9 +382,6 @@
     }
     return result;
   }
-
-  refreshBtn.addEventListener('click', loadData);
-  loadData();
 </script>
 </body>
 </html>
