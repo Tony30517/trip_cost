@@ -555,19 +555,10 @@
     PEOPLE.forEach(name => { paid[name] = 0; owed[name] = 0; });
 
     expenses.forEach(e => {
-      // 均分後除不盡的零頭（1 元為單位）依序分給前幾位分攤人，
-      // 讓每一筆消費的分攤金額加總起來一定等於原始金額，不會有無法追蹤的零頭。
-      const ordered = PEOPLE.filter(name => e.participants.includes(name));
-      const n = ordered.length;
-      const base = n ? Math.floor(e.amountTWD / n) : 0;
-      const remainder = n ? e.amountTWD - base * n : 0;
-      const shareMap = {};
-      ordered.forEach((name, idx) => {
-        shareMap[name] = base + (idx < remainder ? 1 : 0);
-      });
-      e.shareMap = shareMap;
-      e.orderedParticipants = ordered;
-      ordered.forEach(name => { owed[name] = (owed[name] || 0) + shareMap[name]; });
+      // 除不盡的零頭直接無條件捨去，不特別分給誰。
+      const share = e.participants.length ? Math.floor(e.amountTWD / e.participants.length) : 0;
+      e.share = share;
+      e.participants.forEach(name => { owed[name] = (owed[name] || 0) + share; });
       if (e.payer) paid[e.payer] = (paid[e.payer] || 0) + e.amountTWD;
     });
 
@@ -626,28 +617,24 @@
   }
 
   function cardSharedExpenses(expenses) {
-    const rows = expenses.slice().reverse().map(e => {
-      const breakdown = e.orderedParticipants
-        .map(name => `${name} NT$${fmt(e.shareMap[name])}`)
-        .join('、') || '-';
-      return `
+    const rows = expenses.slice().reverse().map(e => `
       <tr>
         <td>${e.date || ''}</td>
         <td>${e.item}</td>
         <td>${fmtAmountCell(e)}</td>
         <td>${e.payer}</td>
-        <td>${breakdown}</td>
+        <td>${e.participants.join('、') || '-'}</td>
+        <td>NT$ ${fmt(e.share)}</td>
         <td>${e.method || ''}</td>
         <td><button class="danger" onclick="deleteExpense('${e.id}')">刪除</button></td>
-      </tr>`;
-    }).join('');
+      </tr>`).join('');
     return `
       <div class="card">
         <h2>消費明細</h2>
         <div class="table-scroll">
           <table>
             <thead>
-              <tr><th>日期</th><th>項目</th><th>金額</th><th>代墊人</th><th>分攤明細</th><th>付款方式</th><th></th></tr>
+              <tr><th>日期</th><th>項目</th><th>金額</th><th>代墊人</th><th>分攤人</th><th>每人分攤</th><th>付款方式</th><th></th></tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
