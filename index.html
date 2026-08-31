@@ -39,6 +39,16 @@
   .wrap { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 1.4rem; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab {
+    background: none; border: none; color: var(--muted); font-size: 0.9rem; font-family: inherit;
+    padding: 10px 6px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .view { display: none; }
+  .view.active { display: block; }
+
   .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   button, .link-btn {
     background: var(--accent); color: #fff; border: none; border-radius: 8px;
@@ -58,6 +68,7 @@
   .person .name { font-weight: 600; margin-bottom: 4px; }
   .person .row { font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; }
   .person .net { font-size: 1.05rem; font-weight: 700; margin-top: 4px; }
+  .person .value { font-size: 1.1rem; font-weight: 700; margin-top: 4px; }
   .net.pos { color: var(--green); }
   .net.neg { color: var(--red); }
   .settle-list { list-style: none; padding: 0; margin: 0; }
@@ -105,45 +116,97 @@
   <h1>旅遊記帳</h1>
   <div class="sub">資料即時同步自 Firebase，大家開這個網頁都能新增消費</div>
 
-  <div class="toolbar">
-    <button id="addBtn">➕ 新增消費</button>
+  <div class="tabs">
+    <button class="tab active" data-view="home">總覽</button>
+    <button class="tab" data-view="shared">共同花費</button>
+    <button class="tab" data-view="personal">個人花費</button>
   </div>
 
-  <div id="content">
+  <div id="view-home" class="view active">
     <div class="card"><div class="empty">載入中…</div></div>
+  </div>
+
+  <div id="view-shared" class="view">
+    <div class="toolbar">
+      <button class="addSharedBtn">➕ 新增共同花費</button>
+    </div>
+    <div id="content-shared">
+      <div class="card"><div class="empty">載入中…</div></div>
+    </div>
+  </div>
+
+  <div id="view-personal" class="view">
+    <div class="toolbar">
+      <button class="addPersonalBtn">➕ 新增個人花費</button>
+    </div>
+    <div id="content-personal">
+      <div class="card"><div class="empty">載入中…</div></div>
+    </div>
   </div>
 </div>
 
-<div class="modal-backdrop" id="modalBackdrop">
+<div class="modal-backdrop" id="sharedModalBackdrop">
   <div class="modal">
-    <h2>新增消費</h2>
-    <form id="expenseForm">
+    <h2>新增共同花費</h2>
+    <form id="sharedForm">
       <div class="field">
         <label>日期</label>
-        <input type="date" id="fDate" required>
+        <input type="date" id="sDate" required>
       </div>
       <div class="field">
         <label>項目</label>
-        <input type="text" id="fItem" placeholder="例如：機票、晚餐" required>
+        <input type="text" id="sItem" placeholder="例如：機票、晚餐" required>
       </div>
       <div class="field">
         <label>金額（台幣）</label>
-        <input type="number" id="fAmount" min="1" step="1" required>
+        <input type="number" id="sAmount" min="1" step="1" required>
       </div>
       <div class="field">
         <label>代墊人</label>
-        <select id="fPayer" required></select>
+        <select id="sPayer" required></select>
       </div>
       <div class="field">
         <label>分攤人</label>
-        <div class="checkbox-grid" id="fParticipants"></div>
+        <div class="checkbox-grid" id="sParticipants"></div>
       </div>
       <div class="field">
         <label>付款方式（選填）</label>
-        <input type="text" id="fMethod" placeholder="例如：信用卡、現金">
+        <input type="text" id="sMethod" placeholder="例如：信用卡、現金">
       </div>
       <div class="modal-actions">
-        <button type="button" class="secondary" id="cancelBtn">取消</button>
+        <button type="button" class="secondary sharedCancelBtn">取消</button>
+        <button type="submit">送出</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="personalModalBackdrop">
+  <div class="modal">
+    <h2>新增個人花費</h2>
+    <form id="personalForm">
+      <div class="field">
+        <label>日期</label>
+        <input type="date" id="pDate" required>
+      </div>
+      <div class="field">
+        <label>項目</label>
+        <input type="text" id="pItem" placeholder="例如：自己買的紀念品" required>
+      </div>
+      <div class="field">
+        <label>金額（台幣）</label>
+        <input type="number" id="pAmount" min="1" step="1" required>
+      </div>
+      <div class="field">
+        <label>這是誰的花費</label>
+        <select id="pOwner" required></select>
+      </div>
+      <div class="field">
+        <label>付款方式（選填）</label>
+        <input type="text" id="pMethod" placeholder="例如：信用卡、現金">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary personalCancelBtn">取消</button>
         <button type="submit">送出</button>
       </div>
     </form>
@@ -171,19 +234,33 @@
   const db = firebase.firestore();
   const expensesRef = db.collection('trips').doc(TRIP_ID).collection('expenses');
 
-  const content = document.getElementById('content');
-  const addBtn = document.getElementById('addBtn');
-  const modalBackdrop = document.getElementById('modalBackdrop');
-  const cancelBtn = document.getElementById('cancelBtn');
-  const expenseForm = document.getElementById('expenseForm');
-  const fPayer = document.getElementById('fPayer');
-  const fParticipants = document.getElementById('fParticipants');
+  function fmt(n) {
+    return Math.round(n).toLocaleString('zh-Hant-TW');
+  }
+
+  // ---------- 分頁切換 ----------
+  const tabs = document.querySelectorAll('.tab');
+  const views = document.querySelectorAll('.view');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      views.forEach(v => v.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('view-' + tab.dataset.view).classList.add('active');
+    });
+  });
+
+  // ---------- 共同花費表單 ----------
+  const sharedModalBackdrop = document.getElementById('sharedModalBackdrop');
+  const sharedForm = document.getElementById('sharedForm');
+  const sPayer = document.getElementById('sPayer');
+  const sParticipants = document.getElementById('sParticipants');
 
   PEOPLE.forEach(name => {
     const opt = document.createElement('option');
     opt.value = name;
     opt.textContent = name;
-    fPayer.appendChild(opt);
+    sPayer.appendChild(opt);
   });
   PEOPLE.forEach(name => {
     const label = document.createElement('label');
@@ -193,45 +270,42 @@
     cb.checked = true;
     label.appendChild(cb);
     label.appendChild(document.createTextNode(name));
-    fParticipants.appendChild(label);
+    sParticipants.appendChild(label);
   });
 
-  function fmt(n) {
-    return Math.round(n).toLocaleString('zh-Hant-TW');
+  function openSharedModal() {
+    document.getElementById('sDate').value = new Date().toISOString().slice(0, 10);
+    sharedModalBackdrop.classList.add('open');
   }
+  function closeSharedModal() {
+    sharedModalBackdrop.classList.remove('open');
+    sharedForm.reset();
+  }
+  document.querySelectorAll('.addSharedBtn').forEach(b => b.addEventListener('click', openSharedModal));
+  document.querySelectorAll('.sharedCancelBtn').forEach(b => b.addEventListener('click', closeSharedModal));
+  sharedModalBackdrop.addEventListener('click', e => { if (e.target === sharedModalBackdrop) closeSharedModal(); });
 
-  function openModal() {
-    document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
-    modalBackdrop.classList.add('open');
-  }
-  function closeModal() {
-    modalBackdrop.classList.remove('open');
-    expenseForm.reset();
-  }
-  addBtn.addEventListener('click', openModal);
-  cancelBtn.addEventListener('click', closeModal);
-  modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
-
-  expenseForm.addEventListener('submit', async e => {
+  sharedForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const participants = Array.from(fParticipants.querySelectorAll('input:checked')).map(cb => cb.value);
+    const participants = Array.from(sParticipants.querySelectorAll('input:checked')).map(cb => cb.value);
     if (participants.length === 0) {
       alert('至少要選一個分攤人');
       return;
     }
-    const submitBtn = expenseForm.querySelector('button[type="submit"]');
+    const submitBtn = sharedForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     try {
       await expensesRef.add({
-        date: document.getElementById('fDate').value,
-        item: document.getElementById('fItem').value.trim(),
-        amount: Number(document.getElementById('fAmount').value),
-        payer: fPayer.value,
+        type: 'shared',
+        date: document.getElementById('sDate').value,
+        item: document.getElementById('sItem').value.trim(),
+        amount: Number(document.getElementById('sAmount').value),
+        payer: sPayer.value,
         participants,
-        method: document.getElementById('fMethod').value.trim(),
+        method: document.getElementById('sMethod').value.trim(),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-      closeModal();
+      closeSharedModal();
     } catch (err) {
       alert('新增失敗：' + err.message);
     } finally {
@@ -239,6 +313,53 @@
     }
   });
 
+  // ---------- 個人花費表單 ----------
+  const personalModalBackdrop = document.getElementById('personalModalBackdrop');
+  const personalForm = document.getElementById('personalForm');
+  const pOwner = document.getElementById('pOwner');
+
+  PEOPLE.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    pOwner.appendChild(opt);
+  });
+
+  function openPersonalModal() {
+    document.getElementById('pDate').value = new Date().toISOString().slice(0, 10);
+    personalModalBackdrop.classList.add('open');
+  }
+  function closePersonalModal() {
+    personalModalBackdrop.classList.remove('open');
+    personalForm.reset();
+  }
+  document.querySelectorAll('.addPersonalBtn').forEach(b => b.addEventListener('click', openPersonalModal));
+  document.querySelectorAll('.personalCancelBtn').forEach(b => b.addEventListener('click', closePersonalModal));
+  personalModalBackdrop.addEventListener('click', e => { if (e.target === personalModalBackdrop) closePersonalModal(); });
+
+  personalForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const submitBtn = personalForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await expensesRef.add({
+        type: 'personal',
+        date: document.getElementById('pDate').value,
+        item: document.getElementById('pItem').value.trim(),
+        amount: Number(document.getElementById('pAmount').value),
+        owner: pOwner.value,
+        method: document.getElementById('pMethod').value.trim(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closePersonalModal();
+    } catch (err) {
+      alert('新增失敗：' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  // ---------- 刪除 ----------
   async function deleteExpense(id) {
     if (!confirm('確定要刪除這筆消費嗎？')) return;
     try {
@@ -249,21 +370,62 @@
   }
   window.deleteExpense = deleteExpense;
 
-  function showError(msg) {
-    content.innerHTML = `<div class="card"><div class="error">${msg}</div></div>`;
+  function showError(target, msg) {
+    document.getElementById(target).innerHTML = `<div class="card"><div class="error">${msg}</div></div>`;
   }
 
+  // ---------- 讀取資料並分流渲染 ----------
   expensesRef.orderBy('createdAt', 'asc').onSnapshot(
     snapshot => {
-      const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      render(expenses);
+      const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const shared = all.filter(e => e.type !== 'personal');
+      const personal = all.filter(e => e.type === 'personal');
+      renderHome(shared, personal);
+      renderShared(shared);
+      renderPersonal(personal);
     },
-    err => showError('無法讀取資料：' + err.message)
+    err => {
+      showError('view-home', '無法讀取資料：' + err.message);
+      showError('content-shared', '無法讀取資料：' + err.message);
+      showError('content-personal', '無法讀取資料：' + err.message);
+    }
   );
 
-  function render(expenses) {
+  // ---------- 總覽 ----------
+  function renderHome(shared, personal) {
+    const sharedTotal = shared.reduce((s, e) => s + e.amount, 0);
+    const personalTotal = personal.reduce((s, e) => s + e.amount, 0);
+    const grandTotal = sharedTotal + personalTotal;
+
+    document.getElementById('view-home').innerHTML = `
+      <div class="card">
+        <h2>總花費</h2>
+        <div class="total">NT$ ${fmt(grandTotal)}</div>
+      </div>
+      <div class="people-grid">
+        <div class="person">
+          <div class="name">共同花費</div>
+          <div class="value">NT$ ${fmt(sharedTotal)}</div>
+        </div>
+        <div class="person">
+          <div class="name">個人花費</div>
+          <div class="value">NT$ ${fmt(personalTotal)}</div>
+        </div>
+      </div>
+      <div class="toolbar" style="margin-top: 16px;">
+        <button class="addSharedBtn">➕ 新增共同花費</button>
+        <button class="addPersonalBtn secondary">➕ 新增個人花費</button>
+      </div>
+    `;
+    document.querySelectorAll('#view-home .addSharedBtn').forEach(b => b.addEventListener('click', openSharedModal));
+    document.querySelectorAll('#view-home .addPersonalBtn').forEach(b => b.addEventListener('click', openPersonalModal));
+  }
+
+  // ---------- 共同花費頁 ----------
+  function renderShared(expenses) {
+    const container = document.getElementById('content-shared');
     if (expenses.length === 0) {
-      content.innerHTML = '<div class="card"><div class="empty">目前還沒有任何消費紀錄，點上面「新增消費」開始記帳吧！</div></div>';
+      container.innerHTML = '<div class="card"><div class="empty">目前還沒有任何共同花費，點上面「新增共同花費」開始記帳吧！</div></div>';
       return;
     }
 
@@ -283,11 +445,11 @@
 
     const settlements = settleDebts(net);
 
-    content.innerHTML = `
+    container.innerHTML = `
       ${cardTotal(totalSpent, expenses.length)}
       ${cardPeople(paid, owed, net)}
       ${cardSettlement(settlements)}
-      ${cardExpenses(expenses)}
+      ${cardSharedExpenses(expenses)}
       <div class="updated">即時同步中，最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
     `;
   }
@@ -295,7 +457,7 @@
   function cardTotal(total, count) {
     return `
       <div class="card">
-        <h2>總花費</h2>
+        <h2>共同花費總額</h2>
         <div class="total">NT$ ${fmt(total)}</div>
         <div class="sub">共 ${count} 筆消費</div>
       </div>`;
@@ -331,7 +493,7 @@
     return `<div class="card"><h2>建議轉帳（最少筆數結清）</h2><ul class="settle-list">${items}</ul></div>`;
   }
 
-  function cardExpenses(expenses) {
+  function cardSharedExpenses(expenses) {
     const rows = expenses.slice().reverse().map(e => `
       <tr>
         <td>${e.date || ''}</td>
@@ -381,6 +543,47 @@
       if (creditors[j].amt < 1) j++;
     }
     return result;
+  }
+
+  // ---------- 個人花費頁 ----------
+  function renderPersonal(expenses) {
+    const container = document.getElementById('content-personal');
+    if (expenses.length === 0) {
+      container.innerHTML = '<div class="card"><div class="empty">目前還沒有任何個人花費，點上面「新增個人花費」開始記帳吧！</div></div>';
+      return;
+    }
+
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
+
+    const rows = expenses.slice().reverse().map(e => `
+      <tr>
+        <td>${e.date || ''}</td>
+        <td>${e.item}</td>
+        <td>NT$ ${fmt(e.amount)}</td>
+        <td>${e.owner || ''}</td>
+        <td>${e.method || ''}</td>
+        <td><button class="danger" onclick="deleteExpense('${e.id}')">刪除</button></td>
+      </tr>`).join('');
+
+    container.innerHTML = `
+      <div class="card">
+        <h2>個人花費總額</h2>
+        <div class="total">NT$ ${fmt(total)}</div>
+        <div class="sub">共 ${expenses.length} 筆消費</div>
+      </div>
+      <div class="card">
+        <h2>個人花費明細</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>日期</th><th>項目</th><th>金額</th><th>本人</th><th>付款方式</th><th></th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="updated">即時同步中，最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
+    `;
   }
 </script>
 </body>
