@@ -13,6 +13,7 @@
     --muted: #6b7280;
     --border: #e5e7eb;
     --accent: #2563eb;
+    --accent2: #9333ea;
     --green: #16a34a;
     --red: #dc2626;
   }
@@ -24,6 +25,7 @@
       --muted: #9aa0a6;
       --border: #33373d;
       --accent: #5b9bff;
+      --accent2: #c084fc;
       --green: #4ade80;
       --red: #f87171;
     }
@@ -40,12 +42,16 @@
   h1 { font-size: 1.4rem; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
 
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-  .tab {
-    background: none; border: none; color: var(--muted); font-size: 0.9rem; font-family: inherit;
-    padding: 10px 6px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 4px;
   }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab {
+    flex: 1; background: none; border: none; color: var(--text); opacity: 0.6; font-size: 0.85rem; font-family: inherit;
+    padding: 9px 6px; cursor: pointer; border-radius: 8px; transition: background 0.15s, color 0.15s, opacity 0.15s;
+  }
+  .tab:hover { opacity: 0.85; }
+  .tab.active { background: var(--accent); color: #fff; opacity: 1; font-weight: 600; }
   .view { display: none; }
   .view.active { display: block; }
 
@@ -56,6 +62,7 @@
     display: inline-flex; align-items: center; gap: 6px; font-family: inherit;
   }
   button.secondary, .link-btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.personal, .link-btn.personal { background: var(--accent2); }
   button.danger { background: transparent; color: var(--red); padding: 4px 8px; font-size: 0.75rem; }
   .card {
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
@@ -137,7 +144,7 @@
 
   <div id="view-personal" class="view">
     <div class="toolbar">
-      <button class="addPersonalBtn">➕ 新增個人花費</button>
+      <button class="addPersonalBtn personal">➕ 新增個人花費</button>
     </div>
     <div id="content-personal">
       <div class="card"><div class="empty">載入中…</div></div>
@@ -414,7 +421,7 @@
       </div>
       <div class="toolbar" style="margin-top: 16px;">
         <button class="addSharedBtn">➕ 新增共同花費</button>
-        <button class="addPersonalBtn secondary">➕ 新增個人花費</button>
+        <button class="addPersonalBtn personal">➕ 新增個人花費</button>
       </div>
     `;
     document.querySelectorAll('#view-home .addSharedBtn').forEach(b => b.addEventListener('click', openSharedModal));
