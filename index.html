@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅遊記帳</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #2563eb;
+    --green: #16a34a;
+    --red: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --card-bg: #1f2226;
+      --text: #f0f0f0;
+      --muted: #9aa0a6;
+      --border: #33373d;
+      --accent: #5b9bff;
+      --green: #4ade80;
+      --red: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  button, .link-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button.secondary, .link-btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .total { font-size: 1.6rem; font-weight: 700; }
+  .people-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .person { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+  .person .name { font-weight: 600; margin-bottom: 4px; }
+  .person .row { font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; }
+  .person .net { font-size: 1.05rem; font-weight: 700; margin-top: 4px; }
+  .net.pos { color: var(--green); }
+  .net.neg { color: var(--red); }
+  .settle-list { list-style: none; padding: 0; margin: 0; }
+  .settle-list li {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .settle-list li:last-child { border-bottom: none; }
+  .arrow { color: var(--muted); }
+  .amt { margin-left: auto; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  .table-scroll { overflow-x: auto; }
+  .empty, .error { color: var(--muted); font-size: 0.85rem; padding: 8px 0; }
+  .error { color: var(--red); }
+  .updated { color: var(--muted); font-size: 0.75rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>旅遊記帳</h1>
+  <div class="sub" id="tripSub">資料來源：Google 試算表（即時讀取）</div>
+
+  <div class="toolbar">
+    <button id="refreshBtn">🔄 重新整理</button>
+    <a class="link-btn secondary" id="sheetLink" href="#" target="_blank" rel="noopener">✏️ 開啟試算表新增消費</a>
+  </div>
+
+  <div id="content">
+    <div class="card"><div class="empty">載入中…</div></div>
+  </div>
+</div>
+
+<script>
+  // ---- 設定：換其他行程時只要改這裡 ----
+  const SHEET_ID = '1VjMylSkLOyUYRwxzmrJ3j4Qlh6k-pY1zjRsl681HF3Q';
+  const GID = '0';
+  // --------------------------------------
+
+  document.getElementById('sheetLink').href =
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=${GID}`;
+
+  const content = document.getElementById('content');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  function fmt(n) {
+    return Math.round(n).toLocaleString('zh-Hant-TW');
+  }
+
+  function findIdx(cols, upto, label) {
+    for (let i = 0; i <= upto; i++) {
+      if (cols[i] && cols[i].label === label) return i;
+    }
+    return -1;
+  }
+
+  function loadData() {
+    content.innerHTML = '<div class="card"><div class="empty">載入中…</div></div>';
+
+    // 先找出「每人分攤金額」欄位，把搜尋範圍限制在它之前，
+    // 避免跟右邊統計表裡同名的欄位（例如「分攤金額」）搞混。
+    window.__handleSheetData = function (data) {
+      try {
+        render(data.table);
+      } catch (e) {
+        showError('資料格式解析失敗：' + e.message);
+      }
+    };
+
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:__handleSheetData&gid=${GID}&_=${Date.now()}`;
+
+    const old = document.getElementById('gvizScript');
+    if (old) old.remove();
+
+    const script = document.createElement('script');
+    script.id = 'gvizScript';
+    script.src = url;
+    script.onerror = () => showError('無法讀取試算表，請確認試算表已開啟「知道連結的人都可檢視」的共用權限。');
+    document.body.appendChild(script);
+  }
+
+  function showError(msg) {
+    content.innerHTML = `<div class="card"><div class="error">${msg}</div></div>`;
+  }
+
+  function render(table) {
+    const cols = table.cols;
+    const perShareIdx = findIdx(cols, cols.length - 1, '每人分攤金額');
+    if (perShareIdx === -1) {
+      showError('找不到「每人分攤金額」欄位，請確認試算表格式沒有變動。');
+      return;
+    }
+    const dateIdx = findIdx(cols, perShareIdx, '日期');
+    const itemIdx = findIdx(cols, perShareIdx, '項目');
+    const payerIdx = findIdx(cols, perShareIdx, '代墊人');
+    const methodIdx = findIdx(cols, perShareIdx, '付款方式');
+    const splitCountIdx = findIdx(cols, perShareIdx, '分攤人數');
+    let amountIdx = -1;
+    for (let i = 0; i <= perShareIdx; i++) {
+      const label = cols[i] && cols[i].label || '';
+      if (label.indexOf('金額') !== -1 && label.indexOf('分攤') === -1 && label.indexOf('代墊') === -1) {
+        amountIdx = i;
+        break;
+      }
+    }
+
+    const peopleCols = [];
+    for (let i = splitCountIdx + 1; i < perShareIdx; i++) {
+      if (cols[i] && cols[i].label) peopleCols.push({ idx: i, name: cols[i].label });
+    }
+
+    const cellVal = (row, idx) => (idx >= 0 && row.c[idx]) ? row.c[idx].v : null;
+    const cellFmt = (row, idx) => (idx >= 0 && row.c[idx]) ? (row.c[idx].f || row.c[idx].v) : '';
+
+    const expenses = [];
+    const paid = {}, owed = {};
+    peopleCols.forEach(p => { paid[p.name] = 0; owed[p.name] = 0; });
+
+    table.rows.forEach(row => {
+      if (!row || !row.c) return;
+      const item = cellVal(row, itemIdx);
+      const amount = cellVal(row, amountIdx);
+      if (!item || !amount) return; // 跳過空白列（例如只用來放右側統計表的列）
+
+      const payer = cellVal(row, payerIdx) || '';
+      const participants = peopleCols.filter(p => cellVal(row, p.idx) === true).map(p => p.name);
+      const share = participants.length ? amount / participants.length : 0;
+
+      participants.forEach(name => { owed[name] = (owed[name] || 0) + share; });
+      if (payer) paid[payer] = (paid[payer] || 0) + amount;
+
+      expenses.push({
+        date: cellFmt(row, dateIdx),
+        item,
+        amount,
+        payer,
+        method: cellFmt(row, methodIdx),
+        participants,
+        share
+      });
+    });
+
+    if (expenses.length === 0) {
+      content.innerHTML = '<div class="card"><div class="empty">目前試算表裡還沒有任何消費紀錄，點右上角「開啟試算表」新增第一筆吧！</div></div>';
+      return;
+    }
+
+    const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
+    const net = {};
+    peopleCols.forEach(p => { net[p.name] = (paid[p.name] || 0) - (owed[p.name] || 0); });
+
+    const settlements = settleDebts(net);
+
+    content.innerHTML = `
+      ${cardTotal(totalSpent, expenses.length)}
+      ${cardPeople(peopleCols, paid, owed, net)}
+      ${cardSettlement(settlements)}
+      ${cardExpenses(expenses)}
+      <div class="updated">最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
+    `;
+  }
+
+  function cardTotal(total, count) {
+    return `
+      <div class="card">
+        <h2>總花費</h2>
+        <div class="total">NT$ ${fmt(total)}</div>
+        <div class="sub">共 ${count} 筆消費</div>
+      </div>`;
+  }
+
+  function cardPeople(peopleCols, paid, owed, net) {
+    const items = peopleCols.map(p => {
+      const n = net[p.name] || 0;
+      const cls = n > 0.5 ? 'pos' : (n < -0.5 ? 'neg' : '');
+      const netText = n > 0.5 ? `應收回 NT$ ${fmt(n)}` : (n < -0.5 ? `應付出 NT$ ${fmt(-n)}` : '已結清');
+      return `
+        <div class="person">
+          <div class="name">${p.name}</div>
+          <div class="row"><span>已代墊</span><span>NT$ ${fmt(paid[p.name] || 0)}</span></div>
+          <div class="row"><span>應分攤</span><span>NT$ ${fmt(owed[p.name] || 0)}</span></div>
+          <div class="net ${cls}">${netText}</div>
+        </div>`;
+    }).join('');
+    return `<div class="card"><h2>個人餘額</h2><div class="people-grid">${items}</div></div>`;
+  }
+
+  function cardSettlement(settlements) {
+    if (settlements.length === 0) {
+      return `<div class="card"><h2>建議轉帳</h2><div class="empty">大家都結清了 🎉</div></div>`;
+    }
+    const items = settlements.map(s => `
+      <li>
+        <span>${s.from}</span>
+        <span class="arrow">→</span>
+        <span>${s.to}</span>
+        <span class="amt">NT$ ${fmt(s.amount)}</span>
+      </li>`).join('');
+    return `<div class="card"><h2>建議轉帳（最少筆數結清）</h2><ul class="settle-list">${items}</ul></div>`;
+  }
+
+  function cardExpenses(expenses) {
+    const rows = expenses.slice().reverse().map(e => `
+      <tr>
+        <td>${e.date || ''}</td>
+        <td>${e.item}</td>
+        <td>NT$ ${fmt(e.amount)}</td>
+        <td>${e.payer}</td>
+        <td>${e.participants.join('、') || '-'}</td>
+        <td>NT$ ${fmt(e.share)}</td>
+        <td>${e.method || ''}</td>
+      </tr>`).join('');
+    return `
+      <div class="card">
+        <h2>消費明細</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>日期</th><th>項目</th><th>金額</th><th>代墊人</th><th>分攤人</th><th>每人分攤</th><th>付款方式</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function settleDebts(net) {
+    const creditors = [];
+    const debtors = [];
+    Object.keys(net).forEach(name => {
+      const v = net[name];
+      if (v > 0.5) creditors.push({ name, amt: v });
+      else if (v < -0.5) debtors.push({ name, amt: -v });
+    });
+    creditors.sort((a, b) => b.amt - a.amt);
+    debtors.sort((a, b) => b.amt - a.amt);
+
+    const result = [];
+    let i = 0, j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const pay = Math.min(debtors[i].amt, creditors[j].amt);
+      if (pay > 0.5) {
+        result.push({ from: debtors[i].name, to: creditors[j].name, amount: pay });
+      }
+      debtors[i].amt -= pay;
+      creditors[j].amt -= pay;
+      if (debtors[i].amt < 1) i++;
+      if (creditors[j].amt < 1) j++;
+    }
+    return result;
+  }
+
+  refreshBtn.addEventListener('click', loadData);
+  loadData();
+</script>
+</body>
+</html>
