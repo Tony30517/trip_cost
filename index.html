@@ -80,12 +80,18 @@
   .net.neg { color: var(--red); }
   .settle-list { list-style: none; padding: 0; margin: 0; }
   .settle-list li {
-    display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem;
   }
   .settle-list li:last-child { border-bottom: none; }
   .arrow { color: var(--muted); }
-  .amt { margin-left: auto; font-weight: 700; }
+  .amt { font-weight: 700; margin-left: 4px; }
+  .transfer-desc.done { opacity: 0.5; text-decoration: line-through; }
+  .status-btn {
+    flex-shrink: 0; font-size: 0.75rem; padding: 5px 10px; border-radius: 20px;
+    border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .status-btn.done { background: var(--green); color: #fff; border-color: var(--green); }
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
   th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; }
@@ -290,14 +296,19 @@
     });
   });
 
-  // ---------- 匯率 ----------
+  // ---------- 匯率 / 還款狀態 ----------
+  let settledMap = {};
+  let lastSharedExpenses = [];
+
   tripDocRef.onSnapshot(doc => {
-    const data = doc.data();
-    if (data && typeof data.jpyRate === 'number') currentRate = data.jpyRate;
+    const data = doc.data() || {};
+    if (typeof data.jpyRate === 'number') currentRate = data.jpyRate;
+    settledMap = data.settled || {};
     const rateInput = document.getElementById('rateInput');
     if (rateInput && document.activeElement !== rateInput) rateInput.value = currentRate;
     updateFxPreview('s');
     updateFxPreview('p');
+    renderShared(lastSharedExpenses);
   });
 
   async function saveRate() {
@@ -312,6 +323,16 @@
       alert('儲存失敗：' + err.message);
     }
   }
+
+  async function toggleSettled(key) {
+    const next = !settledMap[key];
+    try {
+      await tripDocRef.set({ settled: { [key]: next } }, { merge: true });
+    } catch (err) {
+      alert('更新失敗：' + err.message);
+    }
+  }
+  window.toggleSettled = toggleSettled;
 
   function updateFxPreview(prefix) {
     const currencyEl = document.getElementById(prefix + 'Currency');
@@ -483,6 +504,7 @@
       });
       const shared = all.filter(e => e.type !== 'personal');
       const personal = all.filter(e => e.type === 'personal');
+      lastSharedExpenses = shared;
       renderHome(shared, personal);
       renderShared(shared);
       renderPersonal(personal);
@@ -571,7 +593,7 @@
     container.innerHTML = `
       ${cardTotal(totalSpent, expenses.length)}
       ${cardPeople(paid, owed, net)}
-      ${cardSettlement(settlements)}
+      ${cardSettlement(settlements, settledMap)}
       ${cardSharedExpenses(expenses)}
       <div class="updated">即時同步中，最後更新：${new Date().toLocaleTimeString('zh-Hant-TW')}</div>
     `;
@@ -602,17 +624,25 @@
     return `<div class="card"><h2>個人餘額</h2><div class="people-grid">${items}</div></div>`;
   }
 
-  function cardSettlement(settlements) {
+  function cardSettlement(settlements, settledMap) {
     if (settlements.length === 0) {
       return `<div class="card"><h2>建議轉帳</h2><div class="empty">大家都結清了 🎉</div></div>`;
     }
-    const items = settlements.map(s => `
+    const items = settlements.map(s => {
+      const amt = Math.round(s.amount);
+      const key = `${s.from}→${s.to}:${amt}`;
+      const done = settledMap[key] === true;
+      return `
       <li>
-        <span>${s.from}</span>
-        <span class="arrow">→</span>
-        <span>${s.to}</span>
-        <span class="amt">NT$ ${fmt(s.amount)}</span>
-      </li>`).join('');
+        <span class="transfer-desc${done ? ' done' : ''}">
+          ${s.from} <span class="arrow">→</span> ${s.to}
+          <span class="amt">NT$ ${fmt(amt)}</span>
+        </span>
+        <button type="button" class="status-btn${done ? ' done' : ''}" onclick="toggleSettled('${key}')">
+          ${done ? '✅ 已還清' : '尚未還清'}
+        </button>
+      </li>`;
+    }).join('');
     return `<div class="card"><h2>建議轉帳（最少筆數結清）</h2><ul class="settle-list">${items}</ul></div>`;
   }
 
