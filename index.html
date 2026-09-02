@@ -178,7 +178,7 @@
       <div class="field">
         <label>幣別</label>
         <select id="sCurrency">
-          <option value="JPY" selected>日圓 (¥)</option>
+          <option value="JPY" selected>日幣 (¥)</option>
           <option value="TWD">台幣 (NT$)</option>
         </select>
       </div>
@@ -225,7 +225,7 @@
       <div class="field">
         <label>幣別</label>
         <select id="pCurrency">
-          <option value="JPY" selected>日圓 (¥)</option>
+          <option value="JPY" selected>日幣 (¥)</option>
           <option value="TWD">台幣 (NT$)</option>
         </select>
       </div>
@@ -259,7 +259,7 @@
   // ---- 設定：換其他行程時只要改這裡 ----
   const PEOPLE = ['小鄧', '彥甫', '煒琮', '皇奇'];
   const TRIP_ID = 'japan-2025-12';
-  const DEFAULT_JPY_RATE = 0.22; // 台幣/日圓，僅為初始預設值，實際請在「總覽」頁調整成當下匯率
+  const DEFAULT_JPY_RATE = 0.22; // 台幣/日幣，僅為初始預設值，實際請在「總覽」頁調整成當下匯率
   const SYNC_URL = ''; // Apps Script Web App 部署網址（.../exec），留空則不顯示「立即同步 Excel」按鈕
 
   const firebaseConfig = {
@@ -559,11 +559,11 @@
         <button class="addPersonalBtn personal">➕ 新增個人花費</button>
       </div>
       <div class="card">
-        <h2>日圓匯率設定</h2>
-        <div class="sub">記帳時可以直接輸入日圓金額，會依這裡設定的匯率自動換算成台幣</div>
+        <h2>日幣匯率設定</h2>
+        <div class="sub">記帳時可以直接輸入日幣金額，會依這裡設定的匯率自動換算成台幣</div>
         <div class="rate-row">
           <div class="field">
-            <label>1 日圓 = ? 台幣</label>
+            <label>1 日幣 = ? 台幣</label>
             <input type="number" id="rateInput" step="0.001" min="0.001" value="${currentRate}">
           </div>
           <button class="secondary" id="saveRateBtn" type="button">儲存匯率</button>

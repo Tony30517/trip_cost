@@ -88,7 +88,8 @@ function pushWebExpensesToSheet() {
     var row = new Array(lastCol).fill('');
     if (col['日期'] !== undefined) row[col['日期']] = f.date ? f.date.stringValue : '';
     if (col['項目'] !== undefined) row[col['項目']] = itemLabel;
-    if (col['金額（台幣）'] !== undefined) row[col['金額（台幣）']] = amountTWD;
+    if (col['幣種'] !== undefined) row[col['幣種']] = '台幣';
+    if (col['金額'] !== undefined) row[col['金額']] = amountTWD;
     if (col['代墊人'] !== undefined) row[col['代墊人']] = f.payer ? f.payer.stringValue : '';
     if (col['付款方式'] !== undefined) row[col['付款方式']] = f.method ? f.method.stringValue : '';
     if (col['分攤人數'] !== undefined) row[col['分攤人數']] = participants.length;
@@ -129,7 +130,7 @@ function rebuildSharedExpensesFromSheet() {
   for (var r = 0; r < data.length; r++) {
     var row = data[r];
     var item = col['項目'] !== undefined ? row[col['項目']] : '';
-    var amount = col['金額（台幣）'] !== undefined ? row[col['金額（台幣）']] : '';
+    var amount = col['金額'] !== undefined ? row[col['金額']] : '';
     if (!item || !amount) continue;
 
     var participants = PEOPLE.filter(function (name) {

@@ -1,4 +1,4 @@
-// 在 Sheet 裡的「金額」欄（D欄）輸入日圓金額、按下 Enter 後，
+// 在 Sheet 裡的「金額」欄（D欄）輸入日幣金額、按下 Enter 後，
 // 自動把該儲存格覆蓋成換算後的台幣金額，並把「幣種」欄（C欄）改回「台幣」。
 //
 // 事前準備：找一個不礙眼的儲存格（例如 T1）放這條公式，然後把該欄隱藏起來：
@@ -19,7 +19,7 @@ function onEdit(e) {
   if (row < 2 || col !== AMOUNT_COL || range.getNumColumns() > 1 || range.getNumRows() > 1) return;
 
   var currency = sheet.getRange(row, CURRENCY_COL).getValue();
-  if (currency !== '日圓') return;
+  if (currency !== '日幣') return;
 
   var amount = Number(range.getValue());
   if (!amount) return;
