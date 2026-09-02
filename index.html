@@ -146,6 +146,7 @@
   <div id="view-shared" class="view">
     <div class="toolbar">
       <button class="addSharedBtn">➕ 新增共同花費</button>
+      <button class="secondary" id="syncBtn" style="display:none;">🔄 立即同步 Excel</button>
     </div>
     <div id="content-shared">
       <div class="card"><div class="empty">載入中…</div></div>
@@ -259,6 +260,7 @@
   const PEOPLE = ['小鄧', '彥甫', '煒琮', '皇奇'];
   const TRIP_ID = 'japan-2025-12';
   const DEFAULT_JPY_RATE = 0.22; // 台幣/日圓，僅為初始預設值，實際請在「總覽」頁調整成當下匯率
+  const SYNC_URL = ''; // Apps Script Web App 部署網址（.../exec），留空則不顯示「立即同步 Excel」按鈕
 
   const firebaseConfig = {
     apiKey: "AIzaSyBY06UvwQKpQUSXcT-_BrU2z1okHaslCB0",
@@ -282,6 +284,13 @@
   }
   function currencySymbol(currency) {
     return currency === 'JPY' ? '¥' : 'NT$';
+  }
+
+  // ---------- 與 Excel 手動同步 ----------
+  const syncBtn = document.getElementById('syncBtn');
+  if (SYNC_URL) {
+    syncBtn.style.display = '';
+    syncBtn.addEventListener('click', () => window.open(SYNC_URL, '_blank'));
   }
 
   // ---------- 分頁切換 ----------
@@ -402,6 +411,7 @@
       const amountTWD = currency === 'JPY' ? Math.round(amount * currentRate) : amount;
       await expensesRef.add({
         type: 'shared',
+        source: 'web',
         date: document.getElementById('sDate').value,
         item: document.getElementById('sItem').value.trim(),
         currency,
